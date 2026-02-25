@@ -37,22 +37,22 @@ func FetchTransitData(subwayLine string) []*gtfs.TripUpdate_StopTimeUpdate {
 	return parseStopTimeUpdate(body, stopTimeUpdate)
 }
 
-func parseStopTimeUpdate(body []byte, stopTimeUpdate []*gtfs.TripUpdate_StopTimeUpdate) []*gtfs.TripUpdate_StopTimeUpdate {
+func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate_StopTimeUpdate) []*gtfs.TripUpdate_StopTimeUpdate {
 	feed := gtfs.FeedMessage{}
 
 	err := proto.Unmarshal(body, &feed)
 	if err != nil {
 		log.Default().Println("Error parsing StopTimeUpdate: ", err)
-		return stopTimeUpdate
+		return stopTimeUpdates
 	}
 
 	for _, entity := range feed.Entity {
 		tripUpdate := entity.TripUpdate
 		if tripUpdate != nil {
-			stopTimeUpdate = append(stopTimeUpdate, tripUpdate.GetStopTimeUpdate()...)
+			stopTimeUpdates = append(stopTimeUpdates, tripUpdate.GetStopTimeUpdate()...)
 		}
 	}
-	return stopTimeUpdate
+	return stopTimeUpdates
 }
 
 // alertReqURL := SUBWAY_LINE_REQUEST_URLS["SERVICE"]
