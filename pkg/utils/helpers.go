@@ -10,95 +10,99 @@ import (
 	"github.com/a-ferraro007/improved-train/pkg/types"
 )
 
-//ConvertToTrainSliceAndParse Function
-func ConvertToTrainSliceAndParse(stopTimeUpdateSlice []*types.StopTimeUpdate) ([]*types.Train, types.ParsedByDirection) {
-	unparsed := make([]*types.Train, 0)
-	parsed := types.ParsedByDirection{Northbound: make([]*types.Train, 0), SouthBound: make([]*types.Train, 0)}
-	for _, trip := range stopTimeUpdateSlice {
+// ConvertToTrainSliceAndParse Function
+func ConvertToTrainSliceAndParse(stopTimeUpdates []*types.StopTimeUpdate) types.TrainsByDirection {
+	trainsByDirection := types.TrainsByDirection{North: make([]*types.Train, 0), South: make([]*types.Train, 0)}
+	for _, trip := range stopTimeUpdates {
 		train := &types.Train{}
-		train.Train = trip
-		if train.Train.ArrivalTime == nil {
+		train.StopTimeUpdate = trip
+		if train.StopTimeUpdate.ArrivalTime == nil {
+			log.Default().Println("Nil ArrivalTime: ", train.StopTimeUpdate.ArrivalTime)
 			continue
 		}
-		train.Train.AddDelay()
-		train.Train.ConvertArrivalNoDelay()
-		train.Train.ConvertArrivalWithDelay()
-		train.Train.ConvertTimeToMinutesNoDelay()
-		train.Train.ConvertTimeToMinutesWithDelay()
+		train.StopTimeUpdate.AddDelay()
+		train.StopTimeUpdate.ConvertArrivalNoDelay()
+		train.StopTimeUpdate.ConvertArrivalWithDelay()
+		train.StopTimeUpdate.ConvertTimeToMinutesNoDelay()
+		train.StopTimeUpdate.ConvertTimeToMinutesWithDelay()
 		//train.Train.ConvertDeparture()
 
-		if train.Train.TimeInMinutes < 0 {
-			//Sometimes time update data is stale so we skip any times that are in the past
-			log.Printf("NEGATIVE TIME IN MINUTES: %v\n", train.Train.ConvertedArrivalTimeNoDelay)
+		if train.StopTimeUpdate.TimeInMinutes < 0 {
+			log.Default().Println("Negative TimeInMinute: ", train.StopTimeUpdate.TimeInMinutes)
 			continue
 		}
 
 		idSplit := strings.Split(trip.ID, "")
 		direction := strings.ToLower(idSplit[len(idSplit)-1])
-
-		//Create helper for this to parse Northbound & Southbound trains
-		if direction == "n" {
-			train.Direction = "Manhattan"
-			train.DirectionV2 = "N" //Use an Enum for this?
-			parsed.Northbound = append(parsed.Northbound, train)
-		} else if direction == "s" {
-			train.Direction = "Brooklyn"
-			train.DirectionV2 = "S" //Use an Enum for this?
-			parsed.SouthBound = append(parsed.SouthBound, train)
+		switch direction {
+		case "n":
+			train.DirectionV2 = "N"
+			trainsByDirection.North = append(trainsByDirection.North, train)
+		case "s":
+			train.DirectionV2 = "S"
+			trainsByDirection.South = append(trainsByDirection.South, train)
+		default:
+			log.Default().Println("Error: Direction unknown: ", direction)
 		}
-
-		unparsed = append(unparsed, train)
 	}
 
-	return unparsed, parsed
+	return trainsByDirection
 }
 
-//FindStopData Function
-func FindStopData(update *gtfs.TripUpdate_StopTimeUpdate, stopID string) (bool, *types.StopTimeUpdate) {
-	match := false
-	stopTimeUpdate := types.StopTimeUpdate{}
-	if update != nil && strings.Contains(update.GetStopId(), stopID) {
-		match = true
-		stopTimeUpdate.ID = update.GetStopId()
+// ParseTripUpdate Function
+func ParseTripUpdate(gtfsStopTimeUpdate *gtfs.TripUpdate_StopTimeUpdate, ret *types.StopTimeUpdate, stopID string) bool {
+	if gtfsStopTimeUpdate != nil && strings.Contains(gtfsStopTimeUpdate.GetStopId(), stopID) {
+		ret.ID = gtfsStopTimeUpdate.GetStopId()
 
-		if update.GetDeparture() != nil {
-			stopTimeUpdate.DepartureTime = update.GetDeparture().Time
-			stopTimeUpdate.GtfsDeparture = update.GetDeparture()
+		if gtfsStopTimeUpdate.GetDeparture() != nil {
+			ret.DepartureTime = gtfsStopTimeUpdate.GetDeparture().Time
+			ret.GtfsDeparture = gtfsStopTimeUpdate.GetDeparture()
 		}
 
-		if update.GetArrival() != nil {
-			stopTimeUpdate.ArrivalTime = update.GetArrival().Time
-			if update.GetArrival().Delay != nil {
-				stopTimeUpdate.Delay = *update.GetArrival().Delay
+		if gtfsStopTimeUpdate.GetArrival() != nil {
+			ret.ArrivalTime = gtfsStopTimeUpdate.GetArrival().Time
+			if gtfsStopTimeUpdate.GetArrival().Delay != nil {
+				ret.Delay = *gtfsStopTimeUpdate.GetArrival().Delay
 			}
 		}
+		return true
 	}
 
-	return match, &stopTimeUpdate
+	return false
 }
 
-//DefaultSort Function
-func DefaultSort(parsed types.ParsedByDirection) types.ParsedByDirection {
-	log.Println("DEFAULT SORT", len(parsed.Northbound))
+func ReturnLimit(trainsByDirection types.TrainsByDirection, limit int) types.TrainsByDirection {
+	if limit == 0 || limit > len(trainsByDirection.South) || limit > len(trainsByDirection.North) {
+		return trainsByDirection
+	}
+	return types.TrainsByDirection{
+		North: trainsByDirection.North[0:limit],
+		South: trainsByDirection.South[0:limit],
+	}
+}
 
-	sort.SliceStable(parsed.Northbound, func(i, j int) bool {
-		return parsed.Northbound[i].Train.TimeInMinutes < parsed.Northbound[j].Train.TimeInMinutes
+// DefaultSort Function
+func DefaultSort(parsed types.TrainsByDirection) types.TrainsByDirection {
+	log.Println("Default sort")
+
+	sort.SliceStable(parsed.North, func(i, j int) bool {
+		return parsed.North[i].StopTimeUpdate.TimeInMinutes < parsed.North[j].StopTimeUpdate.TimeInMinutes
 	})
 
-	sort.SliceStable(parsed.SouthBound, func(i, j int) bool {
-		return parsed.SouthBound[i].Train.TimeInMinutes < parsed.SouthBound[j].Train.TimeInMinutes
+	sort.SliceStable(parsed.South, func(i, j int) bool {
+		return parsed.South[i].StopTimeUpdate.TimeInMinutes < parsed.South[j].StopTimeUpdate.TimeInMinutes
 	})
 
 	return parsed
 }
 
-//DescendingSort Function
-func DescendingSort(parsed types.ParsedByDirection) types.ParsedByDirection {
-	log.Println("DESCENDING SORT", time.Now())
+// DescendingSort Function
+func DescendingSort(parsed types.TrainsByDirection) types.TrainsByDirection {
+	log.Println("Descending sort", time.Now())
 	return parsed
 }
 
-//TestGen Function
-func TestGen(parsed types.ParsedByDirection) types.ParsedByDirection {
+// TestGen Function
+func TestGen(parsed types.TrainsByDirection) types.TrainsByDirection {
 	return parsed
 }

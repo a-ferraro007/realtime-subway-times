@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//Client struct holds all client related data
+// Client struct holds all client related data
 type Client struct {
 	UUID       uuid.UUID
 	Pool       *Pool
@@ -23,18 +23,18 @@ type Client struct {
 	Fetching   bool
 }
 
-//Message Struct
+// Message Struct
 type Message struct {
-	Message types.UpcomingTrain //Confusing naming convention
+	Message types.NextTrain
 	Client  *Client
 }
 
 func (client *Client) read() {
 	defer func() {
-		log.Printf("Closing Read Client: %v \n", client.UUID)
+		log.Default().Println("Closing Read Client: ", client.UUID)
 		client.Pool.Unregister <- client
 		client.Conn.Close()
-		log.Printf("+++++++++++++++Client Closed %v +++++++++++++++ \n", client.UUID)
+		log.Default().Println("Client Closed: ", client.UUID)
 	}()
 
 	for {
@@ -54,59 +54,55 @@ func (client *Client) read() {
 }
 
 func (client *Client) write(cachedGTFSData *[]*gtfs.TripUpdate_StopTimeUpdate) {
-	defer log.Printf("Closing Write Client: %v \n", client.UUID)
-
-	stopTimeUpdateSlice := make([]*types.StopTimeUpdate, 0)
-	upcomingTrain := &types.UpcomingTrain{ClientID: client.UUID, SubwayLine: client.Config.SubwayLine}
+	defer log.Default().Println("Closing write for ClientId: ", client.UUID)
+	log.Default().Println("Writing to ClientId: ", client.UUID)
+	stopTimeUpdate := types.StopTimeUpdate{}
+	stopTimeUpdates := make([]*types.StopTimeUpdate, 0)
+	nextTrain := &types.NextTrain{ClientID: client.UUID, SubwayLine: client.Config.SubwayLine}
 
 	if len(*cachedGTFSData) != 0 {
-		log.Printf("WRITE FROM CACHE: %v\n", client.UUID)
+		log.Default().Println("Cache Hit")
 		for _, tripUpdate := range *cachedGTFSData {
-			match, stopTimeUpdate := utils.FindStopData(tripUpdate, client.Config.StopID)
-			if match {
-				stopTimeUpdateSlice = append(stopTimeUpdateSlice, stopTimeUpdate)
+			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, client.Config.StopID) {
+				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
 			}
 		}
 
-		if len(stopTimeUpdateSlice) > 0 {
-			unparsed, parsed := utils.ConvertToTrainSliceAndParse(stopTimeUpdateSlice)
-			upcomingTrain.Trains = unparsed
-			upcomingTrain.ParsedTrains = client.Config.Funct(parsed)
+		if len(stopTimeUpdates) > 0 {
+			trainsByDirection := client.Config.Func(utils.ConvertToTrainSliceAndParse(stopTimeUpdates))
+			nextTrain.TrainsByDirection = utils.ReturnLimit(trainsByDirection, client.Config.Limit)
 		}
 
-		i := 0
-		for i < 2 {
-			client.writeJSON(Message{Client: client, Message: *upcomingTrain})
-			i++
+		for i := 0; i < 2; i++ {
+			client.writeJSON(Message{Client: client, Message: *nextTrain})
 		}
 	}
-	log.Printf("START WRITING FOR CLIENT: %v \n", client.UUID)
+
 	for {
 		data, ok := <-client.Send
 		if !ok {
+			log.Default().Println("Error writing to ClientId: ", client.UUID)
 			client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 			return
 		}
-		//not sure if rezeroing the slices is actually necessary
-		upcomingTrain.Trains = make([]*types.Train, 0)
-		upcomingTrain.ParsedTrains.Northbound = make([]*types.Train, 0)
-		upcomingTrain.ParsedTrains.SouthBound = make([]*types.Train, 0)
-		stopTimeUpdateSlice = make([]*types.StopTimeUpdate, 0)
+
+		nextTrain.Trains = make([]*types.Train, 0)
+		nextTrain.TrainsByDirection.North = make([]*types.Train, 0)
+		nextTrain.TrainsByDirection.South = make([]*types.Train, 0)
+		stopTimeUpdates = make([]*types.StopTimeUpdate, 0)
 
 		for _, tripUpdate := range data {
-			match, stopTimeUpdate := utils.FindStopData(tripUpdate, client.Config.StopID)
-			if match {
-				stopTimeUpdateSlice = append(stopTimeUpdateSlice, stopTimeUpdate)
+			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, client.Config.StopID) {
+				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
 			}
 		}
 
-		if len(stopTimeUpdateSlice) > 0 {
-			unparsed, parsed := utils.ConvertToTrainSliceAndParse(stopTimeUpdateSlice)
-			upcomingTrain.Trains = unparsed
-			upcomingTrain.ParsedTrains = client.Config.Funct(parsed)
+		if len(stopTimeUpdates) > 0 {
+			trainsByDirection := client.Config.Func(utils.ConvertToTrainSliceAndParse(stopTimeUpdates))
+			nextTrain.TrainsByDirection = utils.ReturnLimit(trainsByDirection, client.Config.Limit)
 		}
 
-		client.writeJSON(Message{Client: client, Message: *upcomingTrain})
+		client.writeJSON(Message{Client: client, Message: *nextTrain})
 	}
 }
 
@@ -130,22 +126,17 @@ func (client *Client) writeJSON(msg Message) {
 	log.Printf("JSON: %v\n bytes written: %v\n", msg.Message, l)
 }
 
-//ConfigureSort is probably really over kill but this lets you write special
-//parsers/sorters serverside and apply them to multiple clients at once.
-//Eventaully use an enum/constant for the sort configurations/functions.
-//Can probably use this to return custom data types i.e. mixing train times
-// and service alert information.
-func (client *Client) ConfigureSort() {
+func (client *Client) SortConfig() {
 	switch client.Config.Sort {
 	case "descending":
-		client.Config.Funct = utils.DescendingSort
+		client.Config.Func = utils.DescendingSort
 	default:
-		client.Config.Funct = utils.DefaultSort
+		client.Config.Func = utils.DefaultSort
 	}
 }
 
-//ConfigureGenerator is also probably overkill
-func (client *Client) ConfigureGenerator() {
+// GeneratorConfig is also probably overkill
+func (client *Client) GeneratorConfig() {
 	switch client.Config.Generate {
 	case "test":
 		client.Config.Generator = utils.TestGen

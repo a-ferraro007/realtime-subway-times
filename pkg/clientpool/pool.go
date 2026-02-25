@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-//Pool struct holds all pool related data
+// TODO: Create Pools with a UUID and max number of connections
 type Pool struct {
 	SubwayLine           string
 	Clients              map[uuid.UUID]*Client
@@ -61,7 +61,6 @@ func (p *Pool) run() {
 					}
 				}
 			}
-		//change name
 		case broadcast := <-p.Broadcast:
 			p.CachedStopTimeUpdate[p.SubwayLine] = broadcast
 			for _, client := range p.Clients {
@@ -80,7 +79,7 @@ func (p *Pool) fetchData() {
 	//else the client doesn't receive the first for ~20 secs
 	i := 0
 	for i < 2 {
-		transitData := utils.HandleFetchTransitData(p.SubwayLine)
+		transitData := utils.FetchTransitData(p.SubwayLine)
 		p.Broadcast <- transitData
 		i++
 	}
@@ -91,7 +90,7 @@ func (p *Pool) fetchData() {
 			return
 		case time := <-p.Ticker.C:
 			log.Printf("TIME: %v\n", time)
-			transitData := utils.HandleFetchTransitData(p.SubwayLine)
+			transitData := utils.FetchTransitData(p.SubwayLine)
 			p.Broadcast <- transitData
 		}
 	}

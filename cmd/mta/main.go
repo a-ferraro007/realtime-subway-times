@@ -11,9 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//Pools is a map that holds all of the running pools organized by subwaygroup
-//var Pools clientpool.PoolMap
-
+// var Pools clientpool.PoolMap
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -23,21 +21,30 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	log.Println("MTA SERVER v0.2.0")
+	log.Println("Train Time Server v0.3.0")
 	clientpool.Init()
-	stations := utils.Process() //process once when the server starts up
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		(w).Header().Set("Access-Control-Allow-Origin", "*")
+	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("ERROR UPGRADING WEBSOCKET: %v", err)
+			log.Default().Println("Error upgrading http connection: ", err)
 			return
 		}
 
 		subwayLine := r.URL.Query()["subwayLine"]
 		stopID := r.URL.Query()["stopID"]
 
-		if len(stopID) == 0 || len(subwayLine) == 0 {
+		if len(stopID) == 0 {
+			log.Default().Println("Missing stopId")
+			return
+		}
+
+		if len(subwayLine) == 0 {
+			log.Default().Println("Missing subwayLine")
 			return
 		}
 
@@ -45,36 +52,37 @@ func main() {
 	})
 
 	http.HandleFunc("/transit", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("TRASNIT DATE")
 		(w).Header().Set("Access-Control-Allow-Origin", "*")
 
 		stopID := r.URL.Query()["stopID"][0]
 		subwayLine := r.URL.Query()["subwayLine"][0]
-		stopTimeUpdateSlice := make([]*types.StopTimeUpdate, 0)
+		stopTimeUpdates := make([]*types.StopTimeUpdate, 0)
+		if len(stopID) == 0 {
+			log.Default().Println("Missing stopId")
+			return
+		}
 
-		data := utils.HandleFetchTransitData(subwayLine)
-		log.Println(len(data))
+		if len(subwayLine) == 0 {
+			log.Default().Println("Missing subwayLine")
+			return
+		}
+
+		data := utils.FetchTransitData(subwayLine)
+		stopTimeUpdate := types.StopTimeUpdate{}
 		for _, tripUpdate := range data {
-			match, stopTimeUpdate := utils.FindStopData(tripUpdate, stopID)
-			if match {
-				stopTimeUpdateSlice = append(stopTimeUpdateSlice, stopTimeUpdate)
+			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, stopID) {
+				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
 			}
 		}
 
-		if len(stopTimeUpdateSlice) <= 0 {
+		if len(stopTimeUpdates) <= 0 {
 			json, _ := json.Marshal("empty")
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(json)
 		}
 
-		unparsed, parsed := utils.ConvertToTrainSliceAndParse(stopTimeUpdateSlice)
-		trains := unparsed
-		parsedTrains := utils.DefaultSort(parsed)
-
-		m := clientpool.Message{Message: types.UpcomingTrain{
-			Trains:       trains,
-			ParsedTrains: parsedTrains,
-		}}
+		trainsByDirection := utils.DefaultSort(utils.ConvertToTrainSliceAndParse(stopTimeUpdates))
+		m := clientpool.Message{Message: types.NextTrain{TrainsByDirection: trainsByDirection}}
 
 		json, _ := json.Marshal(m.Message)
 		w.Header().Set("Content-Type", "application/json")
@@ -82,13 +90,13 @@ func main() {
 
 	})
 
-	http.HandleFunc("/stations", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(w, "Stations Endpoint")
-		(w).Header().Set("Access-Control-Allow-Origin", "*")
-		json, _ := json.Marshal(stations)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(json)
-	})
+	// http.HandleFunc("/stations", func(w http.ResponseWriter, r *http.Request) {
+	// 	log.Println(w, "Stations Endpoint")
+	// 	(w).Header().Set("Access-Control-Allow-Origin", "*")
+	// 	json, _ := json.Marshal(stations)
+	// 	w.Header().Set("Content-Type", "application/json")
+	// 	w.Write(json)
+	// })
 
 	log.Println("Server Running On Port :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))

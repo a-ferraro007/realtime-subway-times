@@ -10,24 +10,26 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//PoolMap Struct
+// TODO: PoolMap should hold map[string][]*Pool and hold a slice of pools for each subwayLine
+// PoolMap Struct
 type PoolMap struct {
 	Mutex sync.RWMutex
 	Map   map[string]*Pool
 }
 
-//Pools Map
+// Pools Map
 var Pools PoolMap
 
-//Init Function
+// Init Function
 func Init() {
-	log.Println("INITIALIZE POOLS")
+	log.Default().Println("Initialize Pools")
 	Pools.Map = make(map[string]*Pool)
 }
 
-//HandleNewConnection Function
+// HandleNewConnection Function
 func HandleNewConnection(subwayLine string, stopID string, conn *websocket.Conn) {
 	if Pools.Map[subwayLine] == nil {
+		log.Println("nil")
 		createPool(subwayLine)
 		insertIntoPool(subwayLine, stopID, conn)
 	} else {
@@ -50,7 +52,6 @@ func createPool(subwayLine string) *Pool {
 func insertIntoPool(subwayLine string, stopID string, conn *websocket.Conn) {
 	Pools.Mutex.Lock()
 	defer Pools.Mutex.Unlock()
-	log.Println("____________INSERT____________")
 	pool := Pools.Map[subwayLine]
 
 	client := &Client{
@@ -63,22 +64,22 @@ func insertIntoPool(subwayLine string, stopID string, conn *websocket.Conn) {
 		Config:     types.Config{StopID: stopID, SubwayLine: subwayLine, Sort: "ascending"},
 		Fetching:   false,
 	}
-	client.ConfigureSort()
-	client.ConfigureGenerator()
+	client.SortConfig()
 
 	cache := make([]*gtfs.TripUpdate_StopTimeUpdate, 0)
 	cache = pool.CachedStopTimeUpdate[client.Config.SubwayLine]
 	pool.Register <- client
 	go client.read()
 	go client.write(&cache)
+	log.Printf("Inserted ClientId: %v in Pool: %v\n", client.UUID, pool.SubwayLine)
 }
 
-//DeletePool function
+// DeletePool function
 func (p *PoolMap) DeletePool(subwayLine string) {
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()
 
 	p.Map[subwayLine].Done <- true
 	delete(p.Map, subwayLine)
-	log.Printf("Deleted Pool: %v, Pool Map: %v ", subwayLine, p.Map)
+	log.Printf("Deleted Pool: %v, Pool Map: %v\n", subwayLine, p.Map)
 }

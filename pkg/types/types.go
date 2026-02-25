@@ -8,27 +8,28 @@ import (
 	"github.com/google/uuid"
 )
 
-//Config struct holds all client related data
+// Config struct holds all client related data
 type Config struct {
 	StopID     string
 	SubwayLine string
 	Sort       string
 	Generate   string
-	Funct      func(parsed ParsedByDirection) ParsedByDirection
-	Generator  func(parsed ParsedByDirection) ParsedByDirection
+	Func       func(parsed TrainsByDirection) TrainsByDirection
+	Generator  func(parsed TrainsByDirection) TrainsByDirection
+	Limit      int
 	//use this generator property to keep custom property generators
 	//seperate of the sorting function config property.
 }
 
-//SortPrototype struct
-type SortPrototype func(parsed ParsedByDirection) ParsedByDirection
+// SortPrototype struct
+type SortPrototype func(parsed TrainsByDirection) TrainsByDirection
 
-//RespMsg struct
+// RespMsg struct
 type RespMsg struct {
 	Message map[string]interface{}
 }
 
-//StopTimeUpdate struct
+// StopTimeUpdate struct
 type StopTimeUpdate struct {
 	Trip                          *gtfs.TripDescriptor           `json:"trip"`
 	ID                            string                         `json:"id"`
@@ -36,7 +37,7 @@ type StopTimeUpdate struct {
 	DepartureTime                 *int64                         `json:"departureTime"`
 	Delay                         int32                          `json:"delay"`
 	ArrivalTimeWithDelay          int64                          `json:"arrivalTimeDelay"`
-	ConvertedArrivalTimeWithDelay time.Time                      `json:"convertedArrivalTimeWithDelay "`
+	ConvertedArrivalTimeWithDelay time.Time                      `json:"convertedArrivalTimeWithDelay"`
 	ConvertedArrivalTimeNoDelay   time.Time                      `json:"convertedArrivalTimeNoDelay"`
 	ConvertedDepartureTime        time.Time                      `json:"convertedDepartureTime"`
 	TimeInMinutes                 float64                        `json:"timeInMinutes"`
@@ -47,55 +48,57 @@ type StopTimeUpdate struct {
 //Still unsure about how all these time/delay conversions
 //should be handled. Merge all of these into 1 conversion function
 
-//ConvertArrivalNoDelay Func
+// ConvertArrivalNoDelay Func
 func (s *StopTimeUpdate) ConvertArrivalNoDelay() {
 	s.ConvertedArrivalTimeNoDelay = time.Unix(int64(*s.ArrivalTime), 0)
 }
 
-//ConvertTimeToMinutesWithDelay Func
+// ConvertTimeToMinutesWithDelay Func
 func (s *StopTimeUpdate) ConvertTimeToMinutesWithDelay() {
 	s.TimeInMinutes = math.Floor(time.Until(s.ConvertedArrivalTimeWithDelay).Minutes()) + 1
 }
 
-//ConvertArrivalWithDelay Func
+// ConvertArrivalWithDelay Func
 func (s *StopTimeUpdate) ConvertArrivalWithDelay() {
 	s.ConvertedArrivalTimeWithDelay = time.Unix((s.ArrivalTimeWithDelay), 0)
 }
 
-//ConvertDeparture Func
+// ConvertDeparture Func
 func (s *StopTimeUpdate) ConvertDeparture() {
 	s.ConvertedDepartureTime = time.Unix(int64(*s.DepartureTime+int64(s.Delay)), 0)
 }
 
-//ConvertTimeToMinutesNoDelay Func
+// ConvertTimeToMinutesNoDelay Func
 func (s *StopTimeUpdate) ConvertTimeToMinutesNoDelay() {
 	s.TimeInMinutesNoDelay = math.Floor(time.Until(s.ConvertedArrivalTimeNoDelay).Minutes()) + 1
 }
 
-//AddDelay Func
+// AddDelay Func
 func (s *StopTimeUpdate) AddDelay() {
-	s.ArrivalTimeWithDelay = *s.ArrivalTime + int64(s.Delay)
+	if s.ArrivalTime != nil {
+		s.ArrivalTimeWithDelay = *s.ArrivalTime + int64(s.Delay)
+		s.ConvertedArrivalTimeWithDelay = time.Unix(s.ArrivalTimeWithDelay, 0)
+	}
 }
 
-//UpcomingTrain struct
-type UpcomingTrain struct {
-	ClientID     uuid.UUID         `json:"clientId"`
-	SubwayLine   string            `json:"subwayLine"`
-	Trains       []*Train          `json:"trains"` //Return all trains to do whatever clientside
-	ParsedTrains ParsedByDirection `json:"parsedTrains"`
+// NextTrain struct
+type NextTrain struct {
+	ClientID          uuid.UUID `json:"clientId"`
+	SubwayLine        string    `json:"subwayLine"`
+	Trains            []*Train  `json:"trains"`
+	TrainsByDirection `json:"trainsByDirection"`
 }
 
-//Train Struct
+// Train Struct
 type Train struct {
-	DirectionV2 string          `json:"directionV2"`
-	Direction   string          `json:"direction"`
-	Train       *StopTimeUpdate `json:"train"`
+	DirectionV2    string          `json:"directionV2"`
+	StopTimeUpdate *StopTimeUpdate `json:"stopTimeUpdate"`
 }
 
-//ParsedByDirection Struct
-type ParsedByDirection struct {
-	Northbound []*Train `json:"northbound"` //sorted by the default sorting
-	SouthBound []*Train `json:"southbound"` //sorted by the default sorting
+// TrainByDirection Struct
+type TrainsByDirection struct {
+	North []*Train `json:"north"`
+	South []*Train `json:"south"`
 	//Add ability to attach a custom data type here so I can
 	//use the config struct to write functions that can combine
 	//different data feeds into a single return object.

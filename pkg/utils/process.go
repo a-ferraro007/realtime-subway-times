@@ -25,7 +25,7 @@ var SUBWAY_LINE_REQUEST_URLS = map[string]string {
 }
 ********************/
 
-//Station struct
+// Station struct
 type Station struct {
 	StationID      string `json:"stationId"`
 	ComplexID      string `json:"complexId"`
@@ -40,8 +40,8 @@ type Station struct {
 	SouthDirection string `json:"southDirectionLabel"`
 }
 
-//SubwayStationMap is a slice of stations mapped to a
-//subway line
+// SubwayStationMap is a slice of stations mapped to a
+// subway line
 type SubwayStationMap struct {
 	NUMBERS ParsedStationMap
 	ACE     ParsedStationMap
@@ -172,7 +172,6 @@ func containsAny(str string, substr string) bool {
 	return false
 }
 
-//Process function
 func Process() SubwayStationMap {
 	f, err := os.Open("./static_transit/stations.csv")
 	if err != nil {
