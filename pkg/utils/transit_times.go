@@ -54,13 +54,3 @@ func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate_StopTim
 	}
 	return stopTimeUpdates
 }
-
-// alertReqURL := SUBWAY_LINE_REQUEST_URLS["SERVICE"]
-// req, err := http.NewRequest("GET", alertReqURL, nil)
-
-// req.Header.Set("x-api-key", MTA_API_KEY)
-// if err != nil {
-// 	log.Println("LINE 104")
-// 	log.Default().Println(err)
-// 	return make([]*gtfs.TripUpdate_StopTimeUpdate, 0)
-// }
