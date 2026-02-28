@@ -11,30 +11,30 @@ import (
 
 func FetchTransitData(subwayLine string) []*gtfs.TripUpdate {
 	client := &http.Client{}
-	tripUpdate := make([]*gtfs.TripUpdate, 0)
+	tripUpdates := make([]*gtfs.TripUpdate, 0)
 
 	reqURL := SUBWAY_LINE_REQUEST_URLS[subwayLine]
 	req, err := http.NewRequest("GET", reqURL, nil)
 	req.Header.Set("x-api-key", MTA_API_KEY)
 	if err != nil {
 		log.Default().Println("Error fetching transit data: ", err)
-		return tripUpdate
+		return tripUpdates
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Default().Println(err)
-		return tripUpdate
+		return tripUpdates
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Default().Println(err)
-		return tripUpdate
+		return tripUpdates
 	}
 
-	return parseTripUpdates(body, tripUpdate)
+	return parseTripUpdates(body, tripUpdates)
 }
 
 func parseTripUpdates(body []byte, tripUpdates []*gtfs.TripUpdate) []*gtfs.TripUpdate {

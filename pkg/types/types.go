@@ -95,7 +95,7 @@ type NextTrain struct {
 
 // Train Struct
 type Train struct {
-	DirectionV2    string          `json:"directionV2"`
+	Direction      string          `json:"direction"`
 	StopTimeUpdate *StopTimeUpdate `json:"stopTimeUpdate"`
 }
 
