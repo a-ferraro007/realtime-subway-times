@@ -11,46 +11,46 @@ import (
 
 func FetchTransitData(subwayLine string) []*gtfs.TripUpdate {
 	client := &http.Client{}
-	stopTimeUpdate := make([]*gtfs.TripUpdate, 0)
+	tripUpdate := make([]*gtfs.TripUpdate, 0)
 
 	reqURL := SUBWAY_LINE_REQUEST_URLS[subwayLine]
 	req, err := http.NewRequest("GET", reqURL, nil)
 	req.Header.Set("x-api-key", MTA_API_KEY)
 	if err != nil {
 		log.Default().Println("Error fetching transit data: ", err)
-		return stopTimeUpdate
+		return tripUpdate
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Default().Println(err)
-		return stopTimeUpdate
+		return tripUpdate
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Default().Println(err)
-		return stopTimeUpdate
+		return tripUpdate
 	}
 
-	return parseStopTimeUpdate(body, stopTimeUpdate)
+	return parseTripUpdates(body, tripUpdate)
 }
 
-func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate) []*gtfs.TripUpdate {
+func parseTripUpdates(body []byte, tripUpdates []*gtfs.TripUpdate) []*gtfs.TripUpdate {
 	feed := gtfs.FeedMessage{}
 
 	err := proto.Unmarshal(body, &feed)
 	if err != nil {
 		log.Default().Println("Error parsing StopTimeUpdate: ", err)
-		return stopTimeUpdates
+		return tripUpdates
 	}
 
 	for _, entity := range feed.Entity {
 		tripUpdate := entity.TripUpdate
 		if tripUpdate != nil {
-			stopTimeUpdates = append(stopTimeUpdates, tripUpdate)
+			tripUpdates = append(tripUpdates, tripUpdate)
 		}
 	}
-	return stopTimeUpdates
+	return tripUpdates
 }
