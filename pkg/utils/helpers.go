@@ -30,10 +30,10 @@ func ConvertToTrainSliceAndParse(stopTimeUpdates []*types.StopTimeUpdate) types.
 		direction := strings.ToLower(strings.Split(stopTime.ID, "")[len(strings.Split(stopTime.ID, ""))-1])
 		switch direction {
 		case "n":
-			train.DirectionV2 = "N"
+			train.Direction = "N"
 			trainsByDirection.North = append(trainsByDirection.North, train)
 		case "s":
-			train.DirectionV2 = "S"
+			train.Direction = "S"
 			trainsByDirection.South = append(trainsByDirection.South, train)
 		default:
 			log.Default().Println("Error: Direction unknown: ", direction)
