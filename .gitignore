@@ -5,6 +5,7 @@ nginx/
 
 /mta
 /main
+/archived
 
 dhparam/
 mta-app.text

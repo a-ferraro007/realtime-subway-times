@@ -10,28 +10,30 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//PoolMap Struct
+// TODO: PoolMap should hold map[string][]*Pool and hold a slice of pools for each subwayLine
+// PoolMap Struct
 type PoolMap struct {
 	Mutex sync.RWMutex
 	Map   map[string]*Pool
 }
 
-//Pools Map
+// Pools Map
 var Pools PoolMap
 
-//Init Function
+// Init Function
 func Init() {
-	log.Println("INITIALIZE POOLS")
+	log.Default().Println("Initialize Pools")
 	Pools.Map = make(map[string]*Pool)
 }
 
-//HandleNewConnection Function
-func HandleNewConnection(subwayLine string, stopID string, conn *websocket.Conn) {
+// HandleNewConnection Function
+func HandleNewConnection(conn *websocket.Conn, subwayLine string, stopID string, limit int) {
 	if Pools.Map[subwayLine] == nil {
+		log.Default().Println("Creating Pool for: ", subwayLine)
 		createPool(subwayLine)
-		insertIntoPool(subwayLine, stopID, conn)
+		insertIntoPool(conn, subwayLine, stopID, limit)
 	} else {
-		insertIntoPool(subwayLine, stopID, conn)
+		insertIntoPool(conn, subwayLine, stopID, limit)
 	}
 }
 
@@ -47,38 +49,37 @@ func createPool(subwayLine string) *Pool {
 	return pool
 }
 
-func insertIntoPool(subwayLine string, stopID string, conn *websocket.Conn) {
+func insertIntoPool(conn *websocket.Conn, subwayLine string, stopID string, limit int) {
 	Pools.Mutex.Lock()
 	defer Pools.Mutex.Unlock()
-	log.Println("____________INSERT____________")
 	pool := Pools.Map[subwayLine]
 
 	client := &Client{
 		UUID:       uuid.New(),
 		Pool:       pool,
 		Conn:       conn,
-		Send:       make(chan []*gtfs.TripUpdate_StopTimeUpdate),
+		Send:       make(chan []*gtfs.TripUpdate),
 		StopID:     stopID,
 		SubwayLine: subwayLine,
-		Config:     types.Config{StopID: stopID, SubwayLine: subwayLine, Sort: "ascending"},
+		Config:     types.Config{StopID: stopID, SubwayLine: subwayLine, Sort: "ascending", Limit: limit},
 		Fetching:   false,
 	}
-	client.ConfigureSort()
-	client.ConfigureGenerator()
+	client.SortConfig()
 
-	cache := make([]*gtfs.TripUpdate_StopTimeUpdate, 0)
+	cache := make([]*gtfs.TripUpdate, 0)
 	cache = pool.CachedStopTimeUpdate[client.Config.SubwayLine]
 	pool.Register <- client
 	go client.read()
 	go client.write(&cache)
+	log.Default().Printf("Inserted ClientId: %v in Pool: %v\n", client.UUID, pool.SubwayLine)
 }
 
-//DeletePool function
+// DeletePool function
 func (p *PoolMap) DeletePool(subwayLine string) {
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()
 
 	p.Map[subwayLine].Done <- true
 	delete(p.Map, subwayLine)
-	log.Printf("Deleted Pool: %v, Pool Map: %v ", subwayLine, p.Map)
+	log.Printf("Deleted Pool: %v, Pool Map: %v\n", subwayLine, p.Map)
 }
