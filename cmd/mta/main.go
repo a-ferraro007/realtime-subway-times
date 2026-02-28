@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/a-ferraro007/improved-train/pkg/clientpool"
 	"github.com/a-ferraro007/improved-train/pkg/types"
@@ -35,56 +36,80 @@ func main() {
 			return
 		}
 
-		subwayLine := r.URL.Query()["subwayLine"]
-		stopID := r.URL.Query()["stopID"]
+		subwayLine := r.URL.Query().Get("subwayLine")
+		stopID := r.URL.Query().Get("stopID")
 
-		if len(stopID) == 0 {
+		if stopID == "" {
 			log.Default().Println("Missing stopId")
 			return
 		}
 
-		if len(subwayLine) == 0 {
+		if subwayLine == "" {
 			log.Default().Println("Missing subwayLine")
 			return
 		}
 
-		clientpool.HandleNewConnection(subwayLine[0], stopID[0], conn)
+		limit := 0
+		if len(r.URL.Query()["limit"]) > 0 {
+			limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+			log.Default().Println("Limit Set: ", limit)
+		}
+
+		clientpool.HandleNewConnection(conn, subwayLine, stopID, limit)
 	})
 
 	http.HandleFunc("/transit", func(w http.ResponseWriter, r *http.Request) {
 		(w).Header().Set("Access-Control-Allow-Origin", "*")
 
-		stopID := r.URL.Query()["stopID"][0]
-		subwayLine := r.URL.Query()["subwayLine"][0]
-		stopTimeUpdates := make([]*types.StopTimeUpdate, 0)
-		if len(stopID) == 0 {
+		subwayLine := r.URL.Query().Get("subwayLine")
+		stopID := r.URL.Query().Get("stopID")
+
+		if stopID == "" {
 			log.Default().Println("Missing stopId")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			w.Write([]byte(`{"error":"missing stopId"}`))
 			return
 		}
 
-		if len(subwayLine) == 0 {
+		if subwayLine == "" {
 			log.Default().Println("Missing subwayLine")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			w.Write([]byte(`{"error":"missing subwayLine"}`))
 			return
 		}
 
 		data := utils.FetchTransitData(subwayLine)
-		stopTimeUpdate := types.StopTimeUpdate{}
+
+		stopTimeUpdates := make([]*types.StopTimeUpdate, 0)
 		for _, tripUpdate := range data {
-			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, stopID) {
-				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+			trip := tripUpdate.GetTrip()
+			for _, stopTime := range tripUpdate.GetStopTimeUpdate() {
+				stopTimeUpdate := types.StopTimeUpdate{}
+				if utils.ParseTripUpdate(trip, stopTime, &stopTimeUpdate, stopID) {
+					stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+				}
 			}
 		}
 
 		if len(stopTimeUpdates) <= 0 {
-			json, _ := json.Marshal("empty")
+			empty := []types.StopTimeUpdate{}
+			json, _ := json.Marshal(empty)
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(json)
+			return
 		}
 
-		trainsByDirection := utils.DefaultSort(utils.ConvertToTrainSliceAndParse(stopTimeUpdates))
-		m := clientpool.Message{Message: types.NextTrain{TrainsByDirection: trainsByDirection}}
+		limit := 0
+		if len(r.URL.Query()["limit"]) > 0 {
+			limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+			log.Default().Println("Limit Set: ", limit)
+		}
 
-		json, _ := json.Marshal(m.Message)
+		// // m := clientpool.Message{Message: types.NextTrain{TrainsByDirection: trainsByDirection}}
+		trainsByDirection := utils.ReturnLimit(utils.DefaultSort(utils.ConvertToTrainSliceAndParse(stopTimeUpdates)), limit)
+		json, _ := json.Marshal(trainsByDirection)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(json)
 

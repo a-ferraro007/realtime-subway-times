@@ -13,12 +13,12 @@ import (
 type Pool struct {
 	SubwayLine           string
 	Clients              map[uuid.UUID]*Client
-	Broadcast            chan []*gtfs.TripUpdate_StopTimeUpdate
+	Broadcast            chan []*gtfs.TripUpdate
 	Register             chan *Client
 	Unregister           chan *Client
 	ActiveTrains         map[string][]map[uuid.UUID]*Client
 	ActiveTrainChannel   chan string
-	CachedStopTimeUpdate map[string][]*gtfs.TripUpdate_StopTimeUpdate
+	CachedStopTimeUpdate map[string][]*gtfs.TripUpdate
 	Ticker               *time.Ticker
 	Done                 chan bool
 }
@@ -27,13 +27,13 @@ func newPool(subwayLine string) *Pool {
 	return &Pool{
 		SubwayLine:         subwayLine,
 		Clients:            make(map[uuid.UUID]*Client), //make(map[*Client]bool),
-		Broadcast:          make(chan []*gtfs.TripUpdate_StopTimeUpdate),
+		Broadcast:          make(chan []*gtfs.TripUpdate),
 		Register:           make(chan *Client),
 		Unregister:         make(chan *Client),
 		ActiveTrains:       make(map[string][]map[uuid.UUID]*Client), //Do we need activeTrains anymore
 		ActiveTrainChannel: make(chan string),
 		//This probably doesn't need to be a map anymore since every pool is scoped to a subwayline
-		CachedStopTimeUpdate: make(map[string][]*gtfs.TripUpdate_StopTimeUpdate),
+		CachedStopTimeUpdate: make(map[string][]*gtfs.TripUpdate),
 		Ticker:               time.NewTicker(10 * time.Second),
 		Done:                 make(chan bool),
 	}

@@ -9,9 +9,9 @@ import (
 	proto "github.com/golang/protobuf/proto"
 )
 
-func FetchTransitData(subwayLine string) []*gtfs.TripUpdate_StopTimeUpdate {
+func FetchTransitData(subwayLine string) []*gtfs.TripUpdate {
 	client := &http.Client{}
-	stopTimeUpdate := make([]*gtfs.TripUpdate_StopTimeUpdate, 0)
+	stopTimeUpdate := make([]*gtfs.TripUpdate, 0)
 
 	reqURL := SUBWAY_LINE_REQUEST_URLS[subwayLine]
 	req, err := http.NewRequest("GET", reqURL, nil)
@@ -37,7 +37,7 @@ func FetchTransitData(subwayLine string) []*gtfs.TripUpdate_StopTimeUpdate {
 	return parseStopTimeUpdate(body, stopTimeUpdate)
 }
 
-func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate_StopTimeUpdate) []*gtfs.TripUpdate_StopTimeUpdate {
+func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate) []*gtfs.TripUpdate {
 	feed := gtfs.FeedMessage{}
 
 	err := proto.Unmarshal(body, &feed)
@@ -49,7 +49,7 @@ func parseStopTimeUpdate(body []byte, stopTimeUpdates []*gtfs.TripUpdate_StopTim
 	for _, entity := range feed.Entity {
 		tripUpdate := entity.TripUpdate
 		if tripUpdate != nil {
-			stopTimeUpdates = append(stopTimeUpdates, tripUpdate.GetStopTimeUpdate()...)
+			stopTimeUpdates = append(stopTimeUpdates, tripUpdate)
 		}
 	}
 	return stopTimeUpdates

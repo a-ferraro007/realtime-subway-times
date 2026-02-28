@@ -17,7 +17,7 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY static_transit/ ./static_transit
+# COPY static_transit/ ./static_transit
 COPY --from=builder /app/cmd/mta /app
 
 EXPOSE 8080

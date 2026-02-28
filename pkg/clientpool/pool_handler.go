@@ -27,13 +27,13 @@ func Init() {
 }
 
 // HandleNewConnection Function
-func HandleNewConnection(subwayLine string, stopID string, conn *websocket.Conn) {
+func HandleNewConnection(conn *websocket.Conn, subwayLine string, stopID string, limit int) {
 	if Pools.Map[subwayLine] == nil {
-		log.Println("nil")
+		log.Default().Println("Creating Pool for: ", subwayLine)
 		createPool(subwayLine)
-		insertIntoPool(subwayLine, stopID, conn)
+		insertIntoPool(conn, subwayLine, stopID, limit)
 	} else {
-		insertIntoPool(subwayLine, stopID, conn)
+		insertIntoPool(conn, subwayLine, stopID, limit)
 	}
 }
 
@@ -49,7 +49,7 @@ func createPool(subwayLine string) *Pool {
 	return pool
 }
 
-func insertIntoPool(subwayLine string, stopID string, conn *websocket.Conn) {
+func insertIntoPool(conn *websocket.Conn, subwayLine string, stopID string, limit int) {
 	Pools.Mutex.Lock()
 	defer Pools.Mutex.Unlock()
 	pool := Pools.Map[subwayLine]
@@ -58,20 +58,20 @@ func insertIntoPool(subwayLine string, stopID string, conn *websocket.Conn) {
 		UUID:       uuid.New(),
 		Pool:       pool,
 		Conn:       conn,
-		Send:       make(chan []*gtfs.TripUpdate_StopTimeUpdate),
+		Send:       make(chan []*gtfs.TripUpdate),
 		StopID:     stopID,
 		SubwayLine: subwayLine,
-		Config:     types.Config{StopID: stopID, SubwayLine: subwayLine, Sort: "ascending"},
+		Config:     types.Config{StopID: stopID, SubwayLine: subwayLine, Sort: "ascending", Limit: limit},
 		Fetching:   false,
 	}
 	client.SortConfig()
 
-	cache := make([]*gtfs.TripUpdate_StopTimeUpdate, 0)
+	cache := make([]*gtfs.TripUpdate, 0)
 	cache = pool.CachedStopTimeUpdate[client.Config.SubwayLine]
 	pool.Register <- client
 	go client.read()
 	go client.write(&cache)
-	log.Printf("Inserted ClientId: %v in Pool: %v\n", client.UUID, pool.SubwayLine)
+	log.Default().Printf("Inserted ClientId: %v in Pool: %v\n", client.UUID, pool.SubwayLine)
 }
 
 // DeletePool function

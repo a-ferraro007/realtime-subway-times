@@ -16,7 +16,7 @@ type Client struct {
 	UUID       uuid.UUID
 	Pool       *Pool
 	Conn       *websocket.Conn
-	Send       chan []*gtfs.TripUpdate_StopTimeUpdate
+	Send       chan []*gtfs.TripUpdate
 	StopID     string
 	SubwayLine string
 	Config     types.Config
@@ -53,18 +53,21 @@ func (client *Client) read() {
 	}
 }
 
-func (client *Client) write(cachedGTFSData *[]*gtfs.TripUpdate_StopTimeUpdate) {
+func (client *Client) write(cachedGTFSData *[]*gtfs.TripUpdate) {
 	defer log.Default().Println("Closing write for ClientId: ", client.UUID)
 	log.Default().Println("Writing to ClientId: ", client.UUID)
-	stopTimeUpdate := types.StopTimeUpdate{}
 	stopTimeUpdates := make([]*types.StopTimeUpdate, 0)
 	nextTrain := &types.NextTrain{ClientID: client.UUID, SubwayLine: client.Config.SubwayLine}
 
 	if len(*cachedGTFSData) != 0 {
 		log.Default().Println("Cache Hit")
 		for _, tripUpdate := range *cachedGTFSData {
-			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, client.Config.StopID) {
-				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+			trip := tripUpdate.GetTrip()
+			for _, stopTime := range tripUpdate.GetStopTimeUpdate() {
+				stopTimeUpdate := types.StopTimeUpdate{}
+				if utils.ParseTripUpdate(trip, stopTime, &stopTimeUpdate, client.Config.StopID) {
+					stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+				}
 			}
 		}
 
@@ -92,8 +95,12 @@ func (client *Client) write(cachedGTFSData *[]*gtfs.TripUpdate_StopTimeUpdate) {
 		stopTimeUpdates = make([]*types.StopTimeUpdate, 0)
 
 		for _, tripUpdate := range data {
-			if utils.ParseTripUpdate(tripUpdate, &stopTimeUpdate, client.Config.StopID) {
-				stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+			trip := tripUpdate.GetTrip()
+			for _, stopTime := range tripUpdate.GetStopTimeUpdate() {
+				stopTimeUpdate := types.StopTimeUpdate{}
+				if utils.ParseTripUpdate(trip, stopTime, &stopTimeUpdate, client.Config.StopID) {
+					stopTimeUpdates = append(stopTimeUpdates, &stopTimeUpdate)
+				}
 			}
 		}
 

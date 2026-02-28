@@ -2,7 +2,6 @@ package utils
 
 import (
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -13,27 +12,22 @@ import (
 // ConvertToTrainSliceAndParse Function
 func ConvertToTrainSliceAndParse(stopTimeUpdates []*types.StopTimeUpdate) types.TrainsByDirection {
 	trainsByDirection := types.TrainsByDirection{North: make([]*types.Train, 0), South: make([]*types.Train, 0)}
-	for _, trip := range stopTimeUpdates {
-		train := &types.Train{}
-		train.StopTimeUpdate = trip
-		if train.StopTimeUpdate.ArrivalTime == nil {
-			log.Default().Println("Nil ArrivalTime: ", train.StopTimeUpdate.ArrivalTime)
-			continue
+	for _, stopTime := range stopTimeUpdates {
+		train := &types.Train{
+			StopTimeUpdate: stopTime,
 		}
-		train.StopTimeUpdate.AddDelay()
-		train.StopTimeUpdate.ConvertArrivalNoDelay()
-		train.StopTimeUpdate.ConvertArrivalWithDelay()
-		train.StopTimeUpdate.ConvertTimeToMinutesNoDelay()
-		train.StopTimeUpdate.ConvertTimeToMinutesWithDelay()
-		//train.Train.ConvertDeparture()
 
-		if train.StopTimeUpdate.TimeInMinutes < 0 {
-			log.Default().Println("Negative TimeInMinute: ", train.StopTimeUpdate.TimeInMinutes)
+		train.StopTimeUpdate.ProcessStopTimeUpdate()
+
+		if train.StopTimeUpdate.SecondsUntilArrival <= -30 {
 			continue
 		}
 
-		idSplit := strings.Split(trip.ID, "")
-		direction := strings.ToLower(idSplit[len(idSplit)-1])
+		if train.StopTimeUpdate.SecondsUntilArrival <= 30 {
+			train.StopTimeUpdate.IsArriving = true
+		}
+
+		direction := strings.ToLower(strings.Split(stopTime.ID, "")[len(strings.Split(stopTime.ID, ""))-1])
 		switch direction {
 		case "n":
 			train.DirectionV2 = "N"
@@ -50,19 +44,35 @@ func ConvertToTrainSliceAndParse(stopTimeUpdates []*types.StopTimeUpdate) types.
 }
 
 // ParseTripUpdate Function
-func ParseTripUpdate(gtfsStopTimeUpdate *gtfs.TripUpdate_StopTimeUpdate, ret *types.StopTimeUpdate, stopID string) bool {
+func ParseTripUpdate(trip *gtfs.TripDescriptor, gtfsStopTimeUpdate *gtfs.TripUpdate_StopTimeUpdate, ret *types.StopTimeUpdate, stopID string) bool {
 	if gtfsStopTimeUpdate != nil && strings.Contains(gtfsStopTimeUpdate.GetStopId(), stopID) {
+		log.Default().Println(gtfsStopTimeUpdate.GetStopId())
 		ret.ID = gtfsStopTimeUpdate.GetStopId()
+		ret.Trip = trip
 
-		if gtfsStopTimeUpdate.GetDeparture() != nil {
-			ret.DepartureTime = gtfsStopTimeUpdate.GetDeparture().Time
-			ret.GtfsDeparture = gtfsStopTimeUpdate.GetDeparture()
+		departure := gtfsStopTimeUpdate.GetDeparture()
+		if departure != nil {
+			if departure.Delay != nil {
+				ret.DepartureDelay.Delay = departure.GetDelay()
+			}
+			if departure.Uncertainty != nil {
+				ret.DepartureDelay.Uncertainty = departure.GetUncertainty()
+			}
+			if departure.Time != nil {
+				ret.DepartureTime = departure.GetTime()
+			}
 		}
 
-		if gtfsStopTimeUpdate.GetArrival() != nil {
-			ret.ArrivalTime = gtfsStopTimeUpdate.GetArrival().Time
-			if gtfsStopTimeUpdate.GetArrival().Delay != nil {
-				ret.Delay = *gtfsStopTimeUpdate.GetArrival().Delay
+		arrival := gtfsStopTimeUpdate.GetArrival()
+		if arrival != nil {
+			if arrival.Delay != nil {
+				ret.ArrivalDelay.Delay = arrival.GetDelay()
+			}
+			if arrival.Uncertainty != nil {
+				ret.ArrivalDelay.Uncertainty = arrival.GetUncertainty()
+			}
+			if arrival.Time != nil {
+				ret.ArrivalTime = arrival.GetTime()
 			}
 		}
 		return true
@@ -85,13 +95,13 @@ func ReturnLimit(trainsByDirection types.TrainsByDirection, limit int) types.Tra
 func DefaultSort(parsed types.TrainsByDirection) types.TrainsByDirection {
 	log.Println("Default sort")
 
-	sort.SliceStable(parsed.North, func(i, j int) bool {
-		return parsed.North[i].StopTimeUpdate.TimeInMinutes < parsed.North[j].StopTimeUpdate.TimeInMinutes
-	})
+	// sort.SliceStable(parsed.North, func(i, j int) bool {
+	// 	return parsed.North[i].StopTimeUpdate.ArrivalTimeInMinutesWithDelay < parsed.North[j].StopTimeUpdate.ArrivalTimeInMinutesWithDelay
+	// })
 
-	sort.SliceStable(parsed.South, func(i, j int) bool {
-		return parsed.South[i].StopTimeUpdate.TimeInMinutes < parsed.South[j].StopTimeUpdate.TimeInMinutes
-	})
+	// sort.SliceStable(parsed.South, func(i, j int) bool {
+	// 	return parsed.South[i].StopTimeUpdate.ArrivalTimeInMinutesWithDelay < parsed.South[j].StopTimeUpdate.ArrivalTimeInMinutesWithDelay
+	// })
 
 	return parsed
 }
